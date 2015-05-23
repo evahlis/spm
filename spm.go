@@ -210,7 +210,7 @@ func main() {
 	}
 
 	if flag.Arg(0) == "" {
-		fmt.Println("Please enter a non-empty service name")
+		fmt.Println("Please enter at least one non-empty service name")
 		return
 	}
 
@@ -237,16 +237,19 @@ func main() {
 		pwDb.WriteToStorage(spmDir)
 		panicError(err)
 	} else if *setFlag && !*deleteFlag && *generatePassword == -1 {
-		fmt.Printf("Enter the password: ")
-		password1 := string(gopass.GetPasswd())
-		fmt.Printf("Re-enter the password: ")
-		password2 := string(gopass.GetPasswd())
-		if password1 != password2 {
-			fmt.Println("Passwords do not match. No changes made to DB.")
-			return
+		for _, name := range flag.Args() {
+			fmt.Printf("Enter the password for [%s]: ", name)
+			password1 := string(gopass.GetPasswd())
+			fmt.Printf("Re-enter the password: ")
+			password2 := string(gopass.GetPasswd())
+			if password1 != password2 {
+				fmt.Println("Passwords do not match. No changes made to DB.")
+				return
+			}
+			pwDb.AddEntry(name, password1)
+			pwDb.WriteToStorage(spmDir)
 		}
-		pwDb.AddEntry(flag.Arg(0), password1)
-		pwDb.WriteToStorage(spmDir)
+
 	} else if !*setFlag && *deleteFlag && *generatePassword == -1 {
 		err = pwDb.RemoveEntry(flag.Arg(0))
 		if err != nil {
