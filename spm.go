@@ -26,6 +26,7 @@ var (
 	deleteFlag          = flag.Bool("del", false, "Use this flag to delete an entry")
 	printFlag           = flag.Bool("print", false, "Use this flag to print password to stdout instead of copying to clipboard")
 	disableSpecialChars = flag.Bool("nosymbols", false, "Use this flag to disable usage of special characters when generating passwords")
+	insecurePwdRead     = flag.Bool("pwdstdin", false, "If set, password will be directly read from STDIN. This should only be used if the process STDIN received piped inputs and not if the user is typing the password in.")
 
 	LETTERS_AND_NUMBERS               = []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
 	LETTERS_NUMBERS_AND_SPECIAL_CHARS = []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_!@#$%^&*()-_+=")
@@ -195,8 +196,13 @@ func main() {
 	initSpmDirIfNotExists(spmDir, "", true)
 	var pwDb PasswordDb
 
-	fmt.Printf("Enter the master password: ")
-	masterPassword := string(gopass.GetPasswd())
+	var masterPassword string
+	if !*insecurePwdRead {
+		fmt.Printf("Enter the master password: ")
+		masterPassword = string(gopass.GetPasswd())
+	} else {
+		fmt.Scan(&masterPassword)
+	}
 
 	err = pwDb.LoadFromStorage(spmDir, masterPassword)
 	panicError(err)
@@ -209,13 +215,16 @@ func main() {
 		return
 	}
 
+	var serviceName string
 	if flag.Arg(0) == "" {
 		fmt.Println("Please enter at least one non-empty service name")
 		return
+	} else {
+		serviceName = flag.Arg(0)
 	}
 
 	if !*deleteFlag && *generatePassword == -1 && !*setFlag {
-		password, err := pwDb.GetEntry(flag.Arg(0))
+		password, err := pwDb.GetEntry(serviceName)
 		if err != nil {
 			fmt.Println(err.Error())
 			return
@@ -233,7 +242,7 @@ func main() {
 			fmt.Println(password)
 		}
 	} else if *generatePassword != -1 && !*deleteFlag && !*setFlag {
-		err = pwDb.GenerateEntry(flag.Arg(0), *generatePassword, !*disableSpecialChars)
+		err = pwDb.GenerateEntry(serviceName, *generatePassword, !*disableSpecialChars)
 		pwDb.WriteToStorage(spmDir)
 		panicError(err)
 	} else if *setFlag && !*deleteFlag && *generatePassword == -1 {
@@ -251,7 +260,7 @@ func main() {
 		}
 
 	} else if !*setFlag && *deleteFlag && *generatePassword == -1 {
-		err = pwDb.RemoveEntry(flag.Arg(0))
+		err = pwDb.RemoveEntry(serviceName)
 		if err != nil {
 			fmt.Println(err.Error())
 			return
