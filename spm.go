@@ -1,35 +1,22 @@
-package main
+package spm
 
 import (
 	"crypto/rand"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
-	"github.com/atotto/clipboard"
 	"github.com/dchest/uniuri"
-	"github.com/howeyc/gopass"
 	"golang.org/x/crypto/nacl/secretbox"
 	"golang.org/x/crypto/sha3"
 	"io/ioutil"
 	"os"
-	"os/user"
 	"sort"
-	"time"
+	"strings"
 )
 
 var (
-	storageDir          = flag.String("dir", ".spm", "Path relative to current user's home directory where data should be stored.")
-	generatePassword    = flag.Int("gen", -1, "Set to the length of the password to be generated")
-	listFlag            = flag.Bool("l", false, "List all available accounts")
-	setFlag             = flag.Bool("set", false, "Enter password for new entry instead of generating it")
-	deleteFlag          = flag.Bool("del", false, "Use this flag to delete an entry")
-	printFlag           = flag.Bool("print", false, "Use this flag to print password to stdout instead of copying to clipboard")
-	disableSpecialChars = flag.Bool("nosymbols", false, "Use this flag to disable usage of special characters when generating passwords")
-	insecurePwdRead     = flag.Bool("pwdstdin", false, "If set, password will be directly read from STDIN. This should only be used if the process STDIN received piped inputs and not if the user is typing the password in.")
-
-	LETTERS_AND_NUMBERS               = []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
-	LETTERS_NUMBERS_AND_SPECIAL_CHARS = []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_!@#$%^&*()-_+=")
+	lettersAndNumbers             = []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
+	lettersNumbersAndSpecialChars = []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_!@#$%^&*()-_+=")
 )
 
 type passwordDbInternals struct {
@@ -139,9 +126,9 @@ func (p *PasswordDb) GenerateEntry(name string, length int, allowSpecialChars bo
 	}
 	var password string
 	if allowSpecialChars {
-		password = uniuri.NewLenChars(length, LETTERS_NUMBERS_AND_SPECIAL_CHARS)
+		password = uniuri.NewLenChars(length, lettersNumbersAndSpecialChars)
 	} else {
-		password = uniuri.NewLenChars(length, LETTERS_AND_NUMBERS)
+		password = uniuri.NewLenChars(length, lettersAndNumbers)
 	}
 	p.data[name] = password
 	return nil
@@ -155,118 +142,17 @@ func (p *PasswordDb) RemoveEntry(name string) error {
 	return nil
 }
 
-func (p *PasswordDb) GetListOfNames() []string {
+func (p *PasswordDb) GetListOfNames() string {
 	result := make([]string, 0)
 	for k, _ := range p.data {
 		result = append(result, k)
 	}
 	sort.Strings(result)
-	return result
+	return strings.Join(result, "\n")
 }
 
 func panicError(err error) {
 	if err != nil {
 		panic(err)
-	}
-}
-
-func initSpmDirIfNotExists(spmDir, masterPassword string, promptForMasterPw bool) bool {
-	if _, err := os.Stat(spmDir); !os.IsNotExist(err) {
-		return false
-	}
-	err := os.MkdirAll(spmDir, 0700)
-	panicError(err)
-	pwDb, err := NewPasswordDb()
-	panicError(err)
-	if promptForMasterPw {
-		fmt.Printf("Creating a new database.\nEnter master password: ")
-		masterPassword = string(gopass.GetPasswd())
-	}
-	pwDb.InitKeyFromPassword(masterPassword)
-	err = pwDb.WriteToStorage(spmDir)
-	panicError(err)
-	return true
-}
-
-func main() {
-	flag.Parse()
-	curUser, err := user.Current()
-	spmDir := curUser.HomeDir + "/.spm"
-	panicError(err)
-	initSpmDirIfNotExists(spmDir, "", true)
-	var pwDb PasswordDb
-
-	var masterPassword string
-	if !*insecurePwdRead {
-		fmt.Printf("Enter the master password: ")
-		masterPassword = string(gopass.GetPasswd())
-	} else {
-		fmt.Scan(&masterPassword)
-	}
-
-	err = pwDb.LoadFromStorage(spmDir, masterPassword)
-	panicError(err)
-
-	if *listFlag {
-		names := pwDb.GetListOfNames()
-		for _, name := range names {
-			fmt.Println(name)
-		}
-		return
-	}
-
-	var serviceName string
-	if flag.Arg(0) == "" {
-		fmt.Println("Please enter at least one non-empty service name")
-		return
-	} else {
-		serviceName = flag.Arg(0)
-	}
-
-	if !*deleteFlag && *generatePassword == -1 && !*setFlag {
-		password, err := pwDb.GetEntry(serviceName)
-		if err != nil {
-			fmt.Println(err.Error())
-			return
-		}
-		if !*printFlag {
-			panicError(clipboard.WriteAll(password))
-			fmt.Println("Copied password to clipboard")
-			for i := 0; i < 6; i++ {
-				fmt.Printf("Clearing in %d seconds...\n", 60-10*i)
-				time.Sleep(10 * time.Second)
-			}
-			panicError(clipboard.WriteAll(""))
-			fmt.Println("Clipboard cleared.")
-		} else {
-			fmt.Println(password)
-		}
-	} else if *generatePassword != -1 && !*deleteFlag && !*setFlag {
-		err = pwDb.GenerateEntry(serviceName, *generatePassword, !*disableSpecialChars)
-		pwDb.WriteToStorage(spmDir)
-		panicError(err)
-	} else if *setFlag && !*deleteFlag && *generatePassword == -1 {
-		for _, name := range flag.Args() {
-			fmt.Printf("Enter the password for [%s]: ", name)
-			password1 := string(gopass.GetPasswd())
-			fmt.Printf("Re-enter the password: ")
-			password2 := string(gopass.GetPasswd())
-			if password1 != password2 {
-				fmt.Println("Passwords do not match. No changes made to DB.")
-				return
-			}
-			pwDb.AddEntry(name, password1)
-			pwDb.WriteToStorage(spmDir)
-		}
-
-	} else if !*setFlag && *deleteFlag && *generatePassword == -1 {
-		err = pwDb.RemoveEntry(serviceName)
-		if err != nil {
-			fmt.Println(err.Error())
-			return
-		}
-		pwDb.WriteToStorage(spmDir)
-	} else {
-		fmt.Println("Invalid flag combination. Run spm --help for help.")
 	}
 }
