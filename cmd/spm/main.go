@@ -7,6 +7,7 @@ import (
 	"github.com/evahlis/spm"
 	"github.com/howeyc/gopass"
 	"os"
+	"os/exec"
 	"os/user"
 	"time"
 )
@@ -18,6 +19,7 @@ var (
 	setFlag             = flag.Bool("set", false, "Enter password for new entry instead of generating it")
 	deleteFlag          = flag.Bool("del", false, "Use this flag to delete an entry")
 	printFlag           = flag.Bool("print", false, "Use this flag to print password to stdout instead of copying to clipboard")
+	qrFlag              = flag.Bool("qr", false, "Print the password as an ANSI QR code to the terminal")
 	disableSpecialChars = flag.Bool("nosymbols", false, "Use this flag to disable usage of special characters when generating passwords")
 	insecurePwdRead     = flag.Bool("pwdstdin", false, "If set, password will be directly read from STDIN. This should only be used if the process STDIN received piped inputs and not if the user is typing the password in.")
 )
@@ -85,7 +87,7 @@ func main() {
 			fmt.Println(err.Error())
 			return
 		}
-		if !*printFlag {
+		if !*printFlag && !*qrFlag {
 			panicError(clipboard.WriteAll(password))
 			fmt.Println("Copied password to clipboard")
 			for i := 0; i < 6; i++ {
@@ -94,6 +96,16 @@ func main() {
 			}
 			panicError(clipboard.WriteAll(""))
 			fmt.Println("Clipboard cleared.")
+		} else if *qrFlag {
+			_, err := exec.LookPath("qrencode")
+			if err != nil {
+				fmt.Println("qrencode must be in your PATH to generate a QR code. On OS X, try `brew install qrencode`.")
+				return
+			}
+			cmd := exec.Command("qrencode", "-t", "ANSI256", password)
+			cmd.Stdout = os.Stdout
+			err = cmd.Run()
+			panicError(err)
 		} else {
 			fmt.Println(password)
 		}
