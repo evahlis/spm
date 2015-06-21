@@ -5,4 +5,4 @@ echo
 
 services="$(echo ${password} | spm -pwdstdin -l)"
 selected=$(echo "${services}" | fzf)
-echo ${password} | spm -pwdstdin ${selected}
+echo ${password} | spm -pwdstdin $@ ${selected}

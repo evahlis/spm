@@ -1,13 +1,16 @@
 package main
 
 import (
+	"code.google.com/p/rsc/qr"
 	"flag"
 	"fmt"
 	"github.com/atotto/clipboard"
 	"github.com/evahlis/spm"
+	"github.com/fumiyas/qrc/lib"
+	"github.com/fumiyas/qrc/tty"
 	"github.com/howeyc/gopass"
+	"github.com/mattn/go-colorable"
 	"os"
-	"os/exec"
 	"os/user"
 	"time"
 )
@@ -46,6 +49,17 @@ func initSpmDirIfNotExists(spmDir, masterPassword string, promptForMasterPw bool
 	err = pwDb.WriteToStorage(spmDir)
 	panicError(err)
 	return true
+}
+
+func printQr(text string) {
+	code, _ := qr.Encode(text, qr.L)
+	da1, err := tty.GetDeviceAttributes1(os.Stdout)
+	if err == nil && da1[tty.DA1_SIXEL] {
+		qrc.PrintSixel(os.Stdout, code, false)
+	} else {
+		stdout := colorable.NewColorableStdout()
+		qrc.PrintAA(stdout, code, false)
+	}
 }
 
 func main() {
@@ -97,15 +111,8 @@ func main() {
 			panicError(clipboard.WriteAll(""))
 			fmt.Println("Clipboard cleared.")
 		} else if *qrFlag {
-			_, err := exec.LookPath("qrencode")
-			if err != nil {
-				fmt.Println("qrencode must be in your PATH to generate a QR code. On OS X, try `brew install qrencode`.")
-				return
-			}
-			cmd := exec.Command("qrencode", "-t", "ANSI256", password)
-			cmd.Stdout = os.Stdout
-			err = cmd.Run()
-			panicError(err)
+			fmt.Println("The password encoded as a QR code:")
+			printQr(password)
 		} else {
 			fmt.Println(password)
 		}
