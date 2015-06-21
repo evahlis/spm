@@ -30,14 +30,14 @@ type PasswordDb struct {
 	keyWasInited bool
 }
 
-func NewPasswordDb() (PasswordDb, error) {
+func NewPasswordDb() (*PasswordDb, error) {
 	var passNonce [32]byte
 	_, err := rand.Read(passNonce[:])
 	if err != nil {
-		return PasswordDb{}, err
+		return &PasswordDb{}, err
 	}
 
-	return PasswordDb{
+	return &PasswordDb{
 		passwordDbInternals: passwordDbInternals{
 			data:          make(map[string]string),
 			passwordNonce: passNonce,
